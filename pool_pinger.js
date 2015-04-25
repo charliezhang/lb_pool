@@ -7,7 +7,6 @@ function PoolPinger(pool_endpoint) {
     this.running = false;
     this.attempts = 0;
     this.ping_timeout = pool_endpoint.ping_timeout;
-    this.out_req = null;
     this.req_timer = null;
 }
 
@@ -43,20 +42,19 @@ PoolPinger.prototype.make_request = function () {
         return;
     }
 
-    this.req_timer = setTimeout(function () {
-        self.on_timeout();
-    }, this.ping_timeout);
-
-    this.out_req = this.pool_endpoint.http.get({
+    var out_req = this.pool_endpoint.http.get({
         host: this.pool_endpoint.ip,
         port: this.pool_endpoint.port,
         agent: false,
         path: this.pool_endpoint.ping_path
     });
-    this.out_req.on("response", function (res) {
+    this.req_timer = setTimeout(function (out_req) {
+        self.on_timeout(out_req);
+    }, this.ping_timeout);
+    out_req.on("response", function (res) {
         self.on_response(res);
     });
-    this.out_req.on("error", function () {
+    out_req.on("error", function () {
         self.attempts++;
         self.ping();
     });
@@ -73,7 +71,7 @@ PoolPinger.prototype.on_response = function (res) {
     }
 };
 
-PoolPinger.prototype.on_timeout = function () {
+PoolPinger.prototype.on_timeout = function (out_req) {
     this.req_timer = null;
     this.out_req.abort();
     // calling abort() will run the "error" listener which will retry
